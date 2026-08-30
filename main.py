@@ -30,6 +30,7 @@ SYMBOLS = [
 ]
 
 TF_CHANNELS = {
+    "1m": "candlestick_1m",   # Testing ke liye 1-minute added
     "15m": "candlestick_15m",
     "1h": "candlestick_1h",
     "1w": "candlestick_1w"
@@ -63,12 +64,12 @@ async def fetch_historical_closes(session, symbol, resolution):
 
 async def run_websocket_bot():
     async with aiohttp.ClientSession() as session:
-        await send_telegram_alert(session, "🚀 *Delta WebSocket Raw Monitor is Online!*")
+        await send_telegram_alert(session, "🚀 *Delta WebSocket Bot (with 1m test) is Online!*")
         
         ema_cache = {}
         print("Fetching initial historical data for EMA calculation...", flush=True)
         for symbol in SYMBOLS:
-            for tf in ["15m", "1h", "1w"]:
+            for tf in ["1m", "15m", "1h", "1w"]:
                 closes = await fetch_historical_closes(session, symbol, tf)
                 ema_cache[f"{symbol}_{tf}"] = closes
         print("Initialization complete. Connecting to WebSocket stream...", flush=True)
@@ -85,18 +86,18 @@ async def run_websocket_bot():
                         "payload": {"channels": channels_list}
                     }
                     await websocket.send(json.dumps(subscribe_message))
-                    print("Successfully subscribed to Delta WebSocket channels.", flush=True)
+                    print("Successfully subscribed to Delta WebSocket channels (including 1m).", flush=True)
 
                     async for message in websocket:
                         data = json.loads(message)
                         
-                        # Print every incoming socket message structure to verify in Render logs
                         print(f"RAW MSG RECEIVED: {str(data)[:150]}", flush=True)
                         
                         if "type" in data and data["type"].startswith("candlestick_"):
                             ch_type = data["type"]
                             tf = ""
-                            if ch_type == "candlestick_15m": tf = "15m"
+                            if ch_type == "candlestick_1m": tf = "1m"
+                            elif ch_type == "candlestick_15m": tf = "15m"
                             elif ch_type == "candlestick_1h": tf = "1h"
                             elif ch_type == "candlestick_1w": tf = "1w"
                             
@@ -124,6 +125,8 @@ async def run_websocket_bot():
 
                             closes_list = ema_cache.get(cache_key, [])
                             if len(closes_list) < 200:
+                                # Agar historical data 200 se kam mila toh live close append karte jayenge
+                                closes_list.append(close_price)
                                 continue
                             
                             closes_list.append(close_price)
@@ -137,7 +140,7 @@ async def run_websocket_bot():
 
                             print(f"[{symbol} {tf}] Closed | High: {high_price}, Low: {low_price}, EMA: {round(ema_val, 2)}", flush=True)
 
-                            # BUY Setup: Wick touches/crosses below EMA, body closes above EMA
+                            # BUY Setup
                             if low_price <= ema_val and body_min > ema_val:
                                 last_alerted_candles[cache_key] = candle_time
                                 msg = (f"🚨 *DELTA REVERSAL ALERT (BUY)* 🚨\n\n"
@@ -147,7 +150,7 @@ async def run_websocket_bot():
                                        f"📉 *EMA 200*: {round(ema_val, 2)}")
                                 await send_telegram_alert(session, msg)
 
-                            # SELL Setup: Wick touches/crosses above EMA, body closes below EMA
+                            # SELL Setup
                             elif high_price >= ema_val and body_max < ema_val:
                                 last_alerted_candles[cache_key] = candle_time
                                 msg = (f"🚨 *DELTA REVERSAL ALERT (SELL)* 🚨\n\n"
