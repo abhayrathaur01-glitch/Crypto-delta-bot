@@ -150,7 +150,7 @@ async def run_websocket_bot():
                                        f"🔹 *Reason*: 200 EMA Wick Rejection!\n"
                                        f"📈 *EMA 200*: {round(ema_val, 2)}")
                                 print(msg, flush=True)
-                                await send_zipped_alert = await send_telegram_alert(session, msg)
+                                await send_telegram_alert(session, msg)
 
             except Exception as e:
                 print(f"WebSocket Error: {e}. Reconnecting in 5 seconds...", flush=True)
