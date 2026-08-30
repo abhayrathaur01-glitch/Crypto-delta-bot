@@ -29,13 +29,6 @@ SYMBOLS = [
     "BNBUSD", "SNDKBUSD", "MRBLBUSD", "MSTRBUSD"
 ]
 
-TF_CHANNELS = {
-    "1m": "candlestick_1m",   # Testing ke liye 1-minute added
-    "15m": "candlestick_15m",
-    "1h": "candlestick_1h",
-    "1w": "candlestick_1w"
-}
-
 last_alerted_candles = {}
 
 async def send_telegram_alert(session, message):
@@ -64,12 +57,12 @@ async def fetch_historical_closes(session, symbol, resolution):
 
 async def run_websocket_bot():
     async with aiohttp.ClientSession() as session:
-        await send_telegram_alert(session, "🚀 *Delta WebSocket Bot (with 1m test) is Online!*")
+        await send_telegram_alert(session, "🚀 *Delta WebSocket Bot is Online!*")
         
         ema_cache = {}
         print("Fetching initial historical data for EMA calculation...", flush=True)
         for symbol in SYMBOLS:
-            for tf in ["1m", "15m", "1h", "1w"]:
+            for tf in ["15m", "1h", "1w"]:
                 closes = await fetch_historical_closes(session, symbol, tf)
                 ema_cache[f"{symbol}_{tf}"] = closes
         print("Initialization complete. Connecting to WebSocket stream...", flush=True)
@@ -77,88 +70,26 @@ async def run_websocket_bot():
         while True:
             try:
                 async with websockets.connect(WS_URL) as websocket:
-                    channels_list = []
-                    for tf_key, channel_name in TF_CHANNELS.items():
-                        channels_list.append({"name": channel_name, "symbols": SYMBOLS})
-
+                    # Delta Exchange standard subscription format payload
                     subscribe_message = {
                         "type": "subscribe",
-                        "payload": {"channels": channels_list}
+                        "payload": {
+                            "channels": [
+                                {
+                                    "name": "v2/ticker",
+                                    "symbols": SYMBOLS
+                                }
+                            ]
+                        }
                     }
                     await websocket.send(json.dumps(subscribe_message))
-                    print("Successfully subscribed to Delta WebSocket channels (including 1m).", flush=True)
+                    print("Successfully subscribed to Delta v2/ticker stream.", flush=True)
 
                     async for message in websocket:
                         data = json.loads(message)
                         
-                        print(f"RAW MSG RECEIVED: {str(data)[:150]}", flush=True)
-                        
-                        if "type" in data and data["type"].startswith("candlestick_"):
-                            ch_type = data["type"]
-                            tf = ""
-                            if ch_type == "candlestick_1m": tf = "1m"
-                            elif ch_type == "candlestick_15m": tf = "15m"
-                            elif ch_type == "candlestick_1h": tf = "1h"
-                            elif ch_type == "candlestick_1w": tf = "1w"
-                            
-                            if not tf:
-                                continue
-
-                            symbol = data.get("symbol")
-                            if not symbol or symbol not in SYMBOLS:
-                                continue
-
-                            is_completed = data.get("completed", True)
-                            if not is_completed:
-                                continue
-
-                            candle_time = data.get("time") or data.get("candle_start_time")
-                            cache_key = f"{symbol}_{tf}"
-                            
-                            if last_alerted_candles.get(cache_key) == candle_time:
-                                continue
-
-                            open_price = float(data['open'])
-                            high_price = float(data['high'])
-                            low_price = float(data['low'])
-                            close_price = float(data['close'])
-
-                            closes_list = ema_cache.get(cache_key, [])
-                            if len(closes_list) < 200:
-                                # Agar historical data 200 se kam mila toh live close append karte jayenge
-                                closes_list.append(close_price)
-                                continue
-                            
-                            closes_list.append(close_price)
-                            k = 2.0 / (200 + 1)
-                            ema_val = closes_list[0]
-                            for price in closes_list[1:]:
-                                ema_val = (price * k) + (ema_val * (1 - k))
-
-                            body_min = min(open_price, close_price)
-                            body_max = max(open_price, close_price)
-
-                            print(f"[{symbol} {tf}] Closed | High: {high_price}, Low: {low_price}, EMA: {round(ema_val, 2)}", flush=True)
-
-                            # BUY Setup
-                            if low_price <= ema_val and body_min > ema_val:
-                                last_alerted_candles[cache_key] = candle_time
-                                msg = (f"🚨 *DELTA REVERSAL ALERT (BUY)* 🚨\n\n"
-                                       f"📌 *Symbol*: {symbol}\n"
-                                       f"⏱ *Timeframe*: {tf}\n"
-                                       f"🔹 *Reason*: 200 EMA Wick Rejection!\n"
-                                       f"📉 *EMA 200*: {round(ema_val, 2)}")
-                                await send_telegram_alert(session, msg)
-
-                            # SELL Setup
-                            elif high_price >= ema_val and body_max < ema_val:
-                                last_alerted_candles[cache_key] = candle_time
-                                msg = (f"🚨 *DELTA REVERSAL ALERT (SELL)* 🚨\n\n"
-                                       f"📌 *Symbol*: {symbol}\n"
-                                       f"⏱ *Timeframe*: {tf}\n"
-                                       f"🔹 *Reason*: 200 EMA Wick Rejection!\n"
-                                       f"📈 *EMA 200*: {round(ema_val, 2)}")
-                                await send_telegram_alert(session, msg)
+                        # Print raw incoming messages to verify stream health
+                        print(f"RAW MSG: {str(data)[:150]}", flush=True)
 
             except Exception as e:
                 print(f"WebSocket Error: {e}. Reconnecting in 5 seconds...", flush=True)
