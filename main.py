@@ -3,6 +3,7 @@ import aiohttp
 import pandas as pd
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
+import time
 
 # Dummy HTTP Server so Render Web Service stays alive
 class DummyServer(BaseHTTPRequestHandler):
@@ -104,29 +105,33 @@ async def fetch_and_check(session, symbol, tf):
                     print(msg, flush=True)
                     await send_telegram_alert(session, msg)
     except Exception:
-        pass  # Silently handle network timeouts to prevent loop breakage
+        pass
 
 async def check_strategy_async(session):
-    print("🔍 Scanning Delta Exchange markets (15m, 1h, 1w) [Zero-Lag Async]...", flush=True)
-    start_time = asyncio.get_event_loop().time()
+    print("🔍 Scanning Delta Exchange markets (15m, 1h, 1w) [Zero-Gap Clock Sync]...", flush=True)
+    start_time = time.time()
     
     tasks = [fetch_and_check(session, symbol, tf) for symbol in SYMBOLS for tf in TIMEFRAMES]
     await asyncio.gather(*tasks)
     
-    elapsed = asyncio.get_event_loop().time() - start_time
+    elapsed = time.time() - start_time
     print(f"⚡ Scan completed in {round(elapsed, 2)} seconds.", flush=True)
 
 async def main():
     async with aiohttp.ClientSession() as session:
-        await send_telegram_alert(session, "🚀 *Delta Scanner Zero-Lag Bot is Online & Active!*")
+        await send_telegram_alert(session, "🚀 *Delta Scanner Zero-Gap Bot is Online & Active!*")
         while True:
-            loop_start = asyncio.get_event_loop().time()
-            
+            # 1. Run the parallel market scan
             await check_strategy_async(session)
             
-            # Precise drift-free timing calculation
-            elapsed = asyncio.get_event_loop().time() - loop_start
-            sleep_time = max(0.5, 60.0 - elapsed)
+            # 2. Absolute wall-clock synchronization (Sleep only the remaining fractional time till next minute)
+            now = time.time()
+            sleep_time = 60.0 - (now % 60.0)
+            
+            # If scan took longer than a minute, trigger next scan immediately without artificial blocks
+            if sleep_time <= 0:
+                sleep_time = 0.1
+                
             await asyncio.sleep(sleep_time)
 
 if __name__ == "__main__":
