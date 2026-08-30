@@ -63,7 +63,7 @@ async def fetch_historical_closes(session, symbol, resolution):
 
 async def run_websocket_bot():
     async with aiohttp.ClientSession() as session:
-        await send_telegram_alert(session, "🚀 *Delta WebSocket Zero-Lag Bot is Online & Monitoring!*")
+        await send_telegram_alert(session, "🚀 *Delta WebSocket Raw Monitor is Online!*")
         
         ema_cache = {}
         print("Fetching initial historical data for EMA calculation...", flush=True)
@@ -89,6 +89,9 @@ async def run_websocket_bot():
 
                     async for message in websocket:
                         data = json.loads(message)
+                        
+                        # Print every incoming socket message structure to verify in Render logs
+                        print(f"RAW MSG RECEIVED: {str(data)[:150]}", flush=True)
                         
                         if "type" in data and data["type"].startswith("candlestick_"):
                             ch_type = data["type"]
@@ -123,7 +126,6 @@ async def run_websocket_bot():
                             if len(closes_list) < 200:
                                 continue
                             
-                            # Calculate current 200 EMA
                             closes_list.append(close_price)
                             k = 2.0 / (200 + 1)
                             ema_val = closes_list[0]
@@ -133,7 +135,6 @@ async def run_websocket_bot():
                             body_min = min(open_price, close_price)
                             body_max = max(open_price, close_price)
 
-                            # Debug print to check candle vs EMA values in logs
                             print(f"[{symbol} {tf}] Closed | High: {high_price}, Low: {low_price}, EMA: {round(ema_val, 2)}", flush=True)
 
                             # BUY Setup: Wick touches/crosses below EMA, body closes above EMA
@@ -144,7 +145,6 @@ async def run_websocket_bot():
                                        f"⏱ *Timeframe*: {tf}\n"
                                        f"🔹 *Reason*: 200 EMA Wick Rejection!\n"
                                        f"📉 *EMA 200*: {round(ema_val, 2)}")
-                                print(msg, flush=True)
                                 await send_telegram_alert(session, msg)
 
                             # SELL Setup: Wick touches/crosses above EMA, body closes below EMA
@@ -155,7 +155,6 @@ async def run_websocket_bot():
                                        f"⏱ *Timeframe*: {tf}\n"
                                        f"🔹 *Reason*: 200 EMA Wick Rejection!\n"
                                        f"📈 *EMA 200*: {round(ema_val, 2)}")
-                                print(msg, flush=True)
                                 await send_telegram_alert(session, msg)
 
             except Exception as e:
