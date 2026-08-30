@@ -105,9 +105,6 @@ if __name__ == "__main__":
     threading.Thread(target=run_dummy_server, daemon=True).start()
     send_telegram_alert("🚀 *Delta Scanner Bot is Online & Active!*")
     
-   while True:
-        try:
-            check_strategy()
-        except Exception as e:
-            print(f"Network issue, retrying in 10s: {e}")
-        time.sleep(60)
+  108    while True:
+109        check_strategy()
+110        time.sleep(60)
