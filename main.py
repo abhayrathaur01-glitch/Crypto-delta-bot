@@ -63,7 +63,7 @@ async def fetch_historical_closes(session, symbol, resolution):
 
 async def run_websocket_bot():
     async with aiohttp.ClientSession() as session:
-        await send_telegram_alert(session, "🚀 *Delta WebSocket Zero-Lag Bot is Online!*")
+        await send_telegram_alert(session, "🚀 *Delta WebSocket Zero-Lag Bot is Online & Monitoring!*")
         
         ema_cache = {}
         print("Fetching initial historical data for EMA calculation...", flush=True)
@@ -123,6 +123,7 @@ async def run_websocket_bot():
                             if len(closes_list) < 200:
                                 continue
                             
+                            # Calculate current 200 EMA
                             closes_list.append(close_price)
                             k = 2.0 / (200 + 1)
                             ema_val = closes_list[0]
@@ -132,6 +133,10 @@ async def run_websocket_bot():
                             body_min = min(open_price, close_price)
                             body_max = max(open_price, close_price)
 
+                            # Debug print to check candle vs EMA values in logs
+                            print(f"[{symbol} {tf}] Closed | High: {high_price}, Low: {low_price}, EMA: {round(ema_val, 2)}", flush=True)
+
+                            # BUY Setup: Wick touches/crosses below EMA, body closes above EMA
                             if low_price <= ema_val and body_min > ema_val:
                                 last_alerted_candles[cache_key] = candle_time
                                 msg = (f"🚨 *DELTA REVERSAL ALERT (BUY)* 🚨\n\n"
@@ -142,6 +147,7 @@ async def run_websocket_bot():
                                 print(msg, flush=True)
                                 await send_telegram_alert(session, msg)
 
+                            # SELL Setup: Wick touches/crosses above EMA, body closes below EMA
                             elif high_price >= ema_val and body_max < ema_val:
                                 last_alerted_candles[cache_key] = candle_time
                                 msg = (f"🚨 *DELTA REVERSAL ALERT (SELL)* 🚨\n\n"
