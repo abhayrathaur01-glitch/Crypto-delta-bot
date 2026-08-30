@@ -1,7 +1,6 @@
 import time
 import requests
 import pandas as pd
-import pandas_ta as ta
 
 # --- CONFIGURATION ---
 TELEGRAM_BOT_TOKEN = "8739623680:AAFu7b7mIHp8nNeN37TClUsHrIjcF1Fzt98"
@@ -62,7 +61,7 @@ def check_strategy():
             if df is None or len(df) < 200:
                 continue
 
-            df['ema200'] = ta.ema(df['close'], length=200)
+            df['ema200'] = df['close'].ewm(span=200, adjust=False).mean()
 
             last_candle = df.iloc[-2] 
             open_price = last_candle['open']
@@ -94,7 +93,8 @@ def check_strategy():
                 print(msg)
                 send_telegram_alert(msg)
 
-while True:
-    print("Scanning Delta Exchange market for 200 EMA Wick Rejections...")
-    check_strategy()
-    time.sleep(60)
+if __name__ == "__main__":
+    while True:
+        print("Scanning Delta Exchange market for 200 EMA Wick Rejections...")
+        check_strategy()
+        time.sleep(60)
