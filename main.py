@@ -4,13 +4,16 @@ import pandas as pd
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-# Dummy HTTP Server so Render Web Service stays alive without timing out
+# Dummy HTTP Server so Render Web Service stays alive
 class DummyServer(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
         self.wfile.write(b"Bot is running successfully!")
+
+    def log_message(self, format, *args):
+        return  # Silence HTTP server logs
 
 def run_dummy_server():
     server = HTTPServer(('0.0.0.0', 10000), DummyServer)
@@ -20,20 +23,10 @@ def run_dummy_server():
 TELEGRAM_BOT_TOKEN = "8739623680:AAFu7b7mIHp8nNeN37TClUsHrIjcF1Fzt98"
 TELEGRAM_CHAT_ID = "-549118591"
 
-# 12 Delta Exchange Tickers List
 SYMBOLS = [
-    "BTCUSD",     # Bitcoin
-    "ETHUSD",     # Ethereum
-    "CRCLXUSD",   # Circle
-    "PAXGUSD",    # Pax Gold
-    "AAVEUSD",    # Aave
-    "NVDAXUSD",   # Nvidia
-    "TSLAXUSD",   # Tesla
-    "SPCXXUSD",   # SpaceX
-    "BNBUSD",     # BNB
-    "SNDKBUSD",   # SNDK BUSD
-    "MRBLBUSD",   # MRBL BUSD
-    "MSTRBUSD"    # MicroStrategy BUSD
+    "BTCUSD", "ETHUSD", "CRCLXUSD", "PAXGUSD", 
+    "AAVEUSD", "NVDAXUSD", "TSLAXUSD", "SPCXXUSD", 
+    "BNBUSD", "SNDKBUSD", "MRBLBUSD", "MSTRBUSD"
 ]
 
 TIMEFRAMES = ["15m", "1h", "1w"]
@@ -50,7 +43,7 @@ def send_telegram_alert(message):
     try:
         requests.post(url, json=payload)
     except Exception as e:
-        print(f"Telegram Alert Error: {e}")
+        print(f"Telegram Alert Error: {e}", flush=True)
 
 def get_delta_candles(symbol, timeframe):
     url = f"https://api.delta.exchange/v2/history/candles?resolution={TIMEFRAME_MAP[timeframe]}&symbol={symbol}"
@@ -65,10 +58,11 @@ def get_delta_candles(symbol, timeframe):
             df['low'] = df['low'].astype(float)
             return df
     except Exception as e:
-        print(f"Error fetching data for {symbol} {timeframe}: {e}")
+        print(f"Error fetching data for {symbol} {timeframe}: {e}", flush=True)
     return None
 
 def check_strategy():
+    print("🔍 Scanning Delta Exchange markets (15m, 1h, 1w)...", flush=True)
     for symbol in SYMBOLS:
         for tf in TIMEFRAMES:
             df = get_delta_candles(symbol, tf)
@@ -94,7 +88,7 @@ def check_strategy():
                        f"⏱ *Timeframe*: {tf}\n"
                        f"🔹 *Reason*: 200 EMA Wick Rejection!\n"
                        f"📉 *EMA 200*: {round(ema, 2)}")
-                print(msg)
+                print(msg, flush=True)
                 send_telegram_alert(msg)
 
             # Bearish Rejection
@@ -104,14 +98,13 @@ def check_strategy():
                        f"⏱ *Timeframe*: {tf}\n"
                        f"🔹 *Reason*: 200 EMA Wick Rejection!\n"
                        f"📈 *EMA 200*: {round(ema, 2)}")
-                print(msg)
+                print(msg, flush=True)
                 send_telegram_alert(msg)
 
 if __name__ == "__main__":
-    # Start dummy web server in background to satisfy Render port check
     threading.Thread(target=run_dummy_server, daemon=True).start()
+    send_telegram_alert("🚀 *Delta Scanner Bot is Online & Active!*")
     
     while True:
-        print("Scanning Delta Exchange market for 200 EMA Wick Rejections...")
         check_strategy()
         time.sleep(60)
