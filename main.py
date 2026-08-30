@@ -1,6 +1,20 @@
 import time
 import requests
 import pandas as pd
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+# Dummy HTTP Server so Render Web Service stays alive without timing out
+class DummyServer(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+        self.wfile.write(b"Bot is running successfully!")
+
+def run_dummy_server():
+    server = HTTPServer(('0.0.0.0', 10000), DummyServer)
+    server.serve_forever()
 
 # --- CONFIGURATION ---
 TELEGRAM_BOT_TOKEN = "8739623680:AAFu7b7mIHp8nNeN37TClUsHrIjcF1Fzt98"
@@ -94,6 +108,9 @@ def check_strategy():
                 send_telegram_alert(msg)
 
 if __name__ == "__main__":
+    # Start dummy web server in background to satisfy Render port check
+    threading.Thread(target=run_dummy_server, daemon=True).start()
+    
     while True:
         print("Scanning Delta Exchange market for 200 EMA Wick Rejections...")
         check_strategy()
